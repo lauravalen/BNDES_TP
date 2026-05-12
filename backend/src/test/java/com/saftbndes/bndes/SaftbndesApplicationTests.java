@@ -1,10 +1,10 @@
-package com.fatec.bndes;
+package com.saftbndes.bndes;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class BndesApplicationTests {
+class SaftbndesApplicationTests {
 
 	@Test
 	void contextLoads() {
