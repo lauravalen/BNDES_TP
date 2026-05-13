@@ -11,6 +11,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.web.multipart.MultipartFile;
 
 // =============================================
 // CAMADA SERVICE
@@ -33,6 +34,106 @@ public class DesembolsoService {
     private DesembolsoRepository repository;
 
     // =============================================
+    // MÉTODO: CARREGAR CSV VIA UPLOAD (MultipartFile)
+    // =============================================
+    // Recebe o arquivo enviado pelo navegador (upload real),
+    // lê o InputStream e salva no banco H2.
+    // Reutiliza toda a lógica de parsing do método carregarCSV.
+    // =============================================
+    // =============================================
+    // MÉTODO: CARREGAR CSV VIA UPLOAD COM LIMITE DE LINHAS
+    // =============================================
+    // limite = 0 significa "sem limite" (importa tudo)
+    // limite = 5000 importa apenas as primeiras 5000 linhas
+    // Útil para testes com arquivos grandes (ex: 770MB do BNDES)
+    // =============================================
+    public String carregarCSVUpload(MultipartFile arquivo, int limite) {
+        if (arquivo == null || arquivo.isEmpty()) {
+            return "ERRO: Nenhum arquivo recebido. Selecione um arquivo CSV.";
+        }
+
+        String nomeArquivo = arquivo.getOriginalFilename();
+        if (nomeArquivo == null || !nomeArquivo.toLowerCase().endsWith(".csv")) {
+            return "ERRO: O arquivo enviado não é um CSV. Envie um arquivo com extensão .csv";
+        }
+
+        int linhasSalvas = 0;
+        int linhasComErro = 0;
+        boolean limitado = limite > 0;
+
+        try {
+            BufferedReader br = new BufferedReader(
+                new InputStreamReader(arquivo.getInputStream(), Charset.forName("Windows-1252"))
+            );
+
+            br.readLine(); // descarta o cabeçalho
+
+            List<DesembolsoMensal> lote = new ArrayList<>();
+
+            String linha;
+            while ((linha = br.readLine()) != null) {
+
+                // Para se atingiu o limite
+                if (limitado && linhasSalvas >= limite) break;
+
+                if (linha.trim().isEmpty()) continue;
+
+                try {
+                    String[] col = linha.split(";", -1);
+                    if (col.length < 15) continue;
+
+                    DesembolsoMensal d = new DesembolsoMensal();
+                    d.setAno(parseInt(col[0]));
+                    d.setMes(parseInt(col[1]));
+                    d.setFormaDeApoio(limpar(col[2]));
+                    d.setProduto(limpar(col[3]));
+                    d.setInovacao(limpar(col[5]));
+                    d.setPorteDaEmpresa(limpar(col[6]));
+                    d.setRegiao(limpar(col[7]));
+                    d.setUf(limpar(col[8]));
+                    d.setMunicipio(limpar(col[9]));
+                    d.setSetorBndes(limpar(col[13]));
+                    if (col.length > 14) d.setSubsetorBndes(limpar(col[14]));
+                    if (col.length > 15) d.setDesembolsos(parseDouble(col[15]));
+
+                    // Acumula em lote para salvar de 500 em 500 (muito mais rápido)
+                    lote.add(d);
+                    linhasSalvas++;
+
+                    if (lote.size() == 500) {
+                        repository.saveAll(lote); // salva 500 de uma vez em vez de 1 por vez
+                        lote.clear();
+                        System.out.println("Upload: salvando lote... " + linhasSalvas + " registros");
+                    }
+
+                } catch (Exception e) {
+                    if (linhasComErro < 5) {
+                        System.out.println("  ERRO na linha " + (linhasSalvas + linhasComErro + 1) + ": " + e.getMessage());
+                    }
+                    linhasComErro++;
+                }
+            }
+
+            if (!lote.isEmpty()) {
+                repository.saveAll(lote);
+            }
+
+            br.close();
+
+            String msg = "Arquivo '" + nomeArquivo + "' importado! " +
+                    linhasSalvas + " registros salvos. " +
+                    linhasComErro + " linhas ignoradas.";
+            if (limitado) {
+                msg += " (limitado às primeiras " + limite + " linhas)";
+            }
+            return msg;
+
+        } catch (Exception e) {
+            return "ERRO ao processar o arquivo: " + e.getMessage();
+        }
+    }
+
+    // =============================================
     // MÉTODO: CARREGAR CSV DO BNDES
     // =============================================
     // Lê o arquivo CSV linha por linha, cria objetos DesembolsoMensal
@@ -40,12 +141,12 @@ public class DesembolsoService {
     //
     // IMPORTANTE: O CSV do BNDES usa encoding Windows-1252 e separador ";"
     // =============================================
-    public String carregarCSV(String caminhoDoArquivo) {
+    public String carregarCSV(String caminhoDoArquivo, int limite) {
         int linhasSalvas = 0;
         int linhasComErro = 0;
+        boolean limitado = limite > 0;
 
         try {
-            // Abre o arquivo com encoding Windows-1252 (padrão do BNDES)
             BufferedReader br = new BufferedReader(
                     new InputStreamReader(
                             new FileInputStream(caminhoDoArquivo),
@@ -53,83 +154,70 @@ public class DesembolsoService {
                     )
             );
 
-            String linha = br.readLine(); // lê e DESCARTA o cabeçalho
+            br.readLine(); // descarta o cabeçalho
 
-            // Loop: lê cada linha do CSV até chegar no fim
+            List<DesembolsoMensal> lote = new ArrayList<>();
+
+            String linha;
             while ((linha = br.readLine()) != null) {
 
-                // Pula linhas vazias
+                if (limitado && linhasSalvas >= limite) break;
                 if (linha.trim().isEmpty()) continue;
 
                 try {
-                    // Divide a linha pelo separador ";"
-                    // Cada posição do array corresponde a uma coluna do CSV
                     String[] col = linha.split(";", -1);
-
-                    // Verifica se a linha tem colunas suficientes
                     if (col.length < 15) continue;
 
-                    // Cria um novo objeto com os dados da linha
                     DesembolsoMensal d = new DesembolsoMensal();
-
-                    // col[0] = Ano
                     d.setAno(parseInt(col[0]));
-
-                    // col[1] = Mês
                     d.setMes(parseInt(col[1]));
-
-                    // col[2] = Forma de apoio (Direto/Indireto)
                     d.setFormaDeApoio(limpar(col[2]));
-
-                    // col[3] = Produto
                     d.setProduto(limpar(col[3]));
-
-                    // col[4] = Instrumento financeiro (não usamos)
-                    // col[5] = Inovação
                     d.setInovacao(limpar(col[5]));
-
-                    // col[6] = Porte da empresa
                     d.setPorteDaEmpresa(limpar(col[6]));
-
-                    // col[7] = Região
                     d.setRegiao(limpar(col[7]));
-
-                    // col[8] = UF (estado)
                     d.setUf(limpar(col[8]));
-
-                    // col[9] = Município
                     d.setMunicipio(limpar(col[9]));
-
-                    // col[10] = Código município (não usamos)
-                    // col[11] = Setor CNAE (não usamos)
-                    // col[12] = Subsetor CNAE (não usamos)
-                    // col[13] = Setor BNDES
                     d.setSetorBndes(limpar(col[13]));
-
-                    // col[14] = Subsetor BNDES
                     if (col.length > 14) d.setSubsetorBndes(limpar(col[14]));
-
-                    // col[15] = Desembolsos em R$
                     if (col.length > 15) d.setDesembolsos(parseDouble(col[15]));
 
-                    // Salva no banco H2 via Repository
-                    repository.save(d);
+                    lote.add(d);
                     linhasSalvas++;
 
-                    // Mostra progresso a cada 1000 registros
-                    if (linhasSalvas % 1000 == 0) {
-                        System.out.println("Salvando... " + linhasSalvas + " registros");
+                    if (lote.size() == 500) {
+                        repository.saveAll(lote);
+                        lote.clear();
+                        System.out.println("Salvando lote... " + linhasSalvas + " registros");
                     }
 
                 } catch (Exception e) {
-                    // Se uma linha tiver erro, pula e continua
+                    if (linhasComErro < 5) {
+                        System.out.println("  ERRO na linha " + (linhasSalvas + linhasComErro + 1) + ": " + e.getMessage());
+                    }
                     linhasComErro++;
                 }
             }
 
+            if (!lote.isEmpty()) {
+                repository.saveAll(lote);
+            }
+                    linhasComErro++;
+                }
+            }
+
+            if (!lote.isEmpty()) {
+                repository.saveAll(lote);
+            }
+
             br.close();
-            return "Carga concluída! " + linhasSalvas + " registros salvos. " +
+
+            String msg = "Carga concluída! " + linhasSalvas + " registros salvos. " +
                     linhasComErro + " linhas com erro ignoradas.";
+            if (limitado) {
+                msg += " (limitado às primeiras " + limite + " linhas)";
+            }
+            return msg;
 
         } catch (FileNotFoundException e) {
             return "ERRO: Arquivo não encontrado em: " + caminhoDoArquivo +

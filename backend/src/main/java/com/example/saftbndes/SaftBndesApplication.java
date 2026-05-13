@@ -4,7 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class SaftndesApplication {
+public class SaftBndesApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(SaftBndesApplication.class, args);

@@ -2,9 +2,11 @@ package com.example.saftbndes.controller;
 
 import com.example.saftbndes.dto.ResumoDTO;
 import com.example.saftbndes.model.DesembolsoMensal;
-import com.example.saftbndes.service.DesembolsoService;import org.springframework.beans.factory.annotation.Autowired;
+import com.example.saftbndes.service.DesembolsoService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Optional;
@@ -139,15 +141,55 @@ public class DesembolsoController {
     }
 
     // =============================================
+    // POST /api/carga/upload
+    // Recebe um arquivo CSV enviado pelo navegador (upload real)
+    //
+    // O frontend envia o arquivo como multipart/form-data:
+    //   <input type="file"> → FormData → fetch POST
+    //
+    // @RequestParam("arquivo") MultipartFile: Spring captura o arquivo
+    // =============================================
+    // =============================================
+    // POST /api/carga/upload
+    // Parâmetros:
+    //   arquivo  = o arquivo CSV (obrigatório)
+    //   limite   = quantas linhas importar (opcional, padrão 5000)
+    //              use limite=0 para importar TUDO (cuidado com arquivos grandes!)
+    //
+    // Exemplos:
+    //   POST /api/carga/upload?limite=1000   → só as 1000 primeiras linhas
+    //   POST /api/carga/upload?limite=0      → arquivo inteiro
+    // =============================================
+    @PostMapping("/carga/upload")
+    public ResponseEntity<String> uploadCSV(
+            @RequestParam("arquivo") MultipartFile arquivo,
+            @RequestParam(value = "limite", defaultValue = "5000") int limite) {
+
+        String resultado = service.carregarCSVUpload(arquivo, limite);
+        if (resultado.startsWith("ERRO")) {
+            return ResponseEntity.badRequest().body(resultado);
+        }
+        return ResponseEntity.ok(resultado);
+    }
+
+    // =============================================
     // POST /api/carga
-    // Lê o arquivo CSV e popula o banco H2
+    // Lê o arquivo CSV diretamente do disco e popula o banco H2
     //
     // Recebe o caminho do arquivo como parâmetro:
     // POST /api/carga?caminho=C:/Downloads/desembolsos-mensais.csv
+    //
+    // Opcional: limite (ex: &limite=10000) para importar apenas N linhas
+    // Use limite=0 para importar tudo (padrão: 50000)
+    //
+    // Vantagem sobre o upload: não precisa enviar o arquivo pela internet,
+    // ideal para arquivos grandes (700MB+)
     // =============================================
     @PostMapping("/carga")
-    public ResponseEntity<String> carregarCSV(@RequestParam String caminho) {
-        String resultado = service.carregarCSV(caminho);
+    public ResponseEntity<String> carregarCSV(
+            @RequestParam String caminho,
+            @RequestParam(value = "limite", defaultValue = "50000") int limite) {
+        String resultado = service.carregarCSV(caminho, limite);
         return ResponseEntity.ok(resultado);
     }
 
