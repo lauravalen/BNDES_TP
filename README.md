@@ -7,9 +7,9 @@ Aplicação Full Stack que consulta, filtra e visualiza dados reais de desembols
 
 ## Integrantes
 
-- Laura
-- Rebeca
-- Thiago Farias da Silva
+- Laura Valentim
+- Rebeca Gomes
+- Thiago Farias
 
 ---
 
