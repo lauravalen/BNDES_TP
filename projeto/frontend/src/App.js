@@ -126,7 +126,10 @@ function App() {
       if (resposta.status === 201) {
         setMensagem('Desembolso cadastrado com sucesso!');
         setAbaAtiva('tabela');
-        buscarDesembolsos(0, false);
+        setFiltroUf('');
+        setFiltroSetor('');
+        setDesembolsos([]);
+        buscarDesembolsos(0, false, '', '');
       }
     } catch (erro) {
       setMensagem('Erro ao salvar: ' + erro.message);
