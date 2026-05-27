@@ -5,3 +5,7 @@ target/
 *.iml
 .DS_Store
 *.log
+# Dados do H2 em modo arquivo (gerado automaticamente)
+data/
+*.mv.db
+*.trace.db
