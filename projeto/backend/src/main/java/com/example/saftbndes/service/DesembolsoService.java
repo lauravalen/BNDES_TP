@@ -1,9 +1,11 @@
 package com.example.saftbndes.service;
 
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.example.saftbndes.dto.ResumoDTO;
 import com.example.saftbndes.model.DesembolsoMensal;
@@ -358,6 +360,53 @@ public class DesembolsoService {
     // Deleta por ID
     public void deletar(Long id) {
         repository.deleteById(id);
+    }
+
+    // =============================================
+    // MIGRAÇÃO: NORMALIZA DADOS EXISTENTES
+    // =============================================
+    // Executado automaticamente ao iniciar a aplicação.
+    // Corrige registros antigos que foram salvos com o normalizador
+    // antigo (ex: "Comércio E Serviços" → "Comércio e Serviços").
+    // =============================================
+    @PostConstruct
+    @Transactional
+    public void migrarDadosExistentes() {
+        List<DesembolsoMensal> todos = repository.findAll();
+        boolean alterou = false;
+
+        for (DesembolsoMensal d : todos) {
+            String setorNorm = normalizar(d.getSetorBndes());
+            String subNorm = normalizar(d.getSubsetorBndes());
+            String munNorm = normalizar(d.getMunicipio());
+            String prodNorm = normalizar(d.getProduto());
+            String regNorm = normalizar(d.getRegiao());
+            String ufConv = converterUf(d.getUf());
+
+            if (!setorNorm.equals(d.getSetorBndes())) {
+                d.setSetorBndes(setorNorm); alterou = true;
+            }
+            if (d.getSubsetorBndes() != null && !subNorm.equals(d.getSubsetorBndes())) {
+                d.setSubsetorBndes(subNorm); alterou = true;
+            }
+            if (d.getMunicipio() != null && !munNorm.equals(d.getMunicipio())) {
+                d.setMunicipio(munNorm); alterou = true;
+            }
+            if (d.getProduto() != null && !prodNorm.equals(d.getProduto())) {
+                d.setProduto(prodNorm); alterou = true;
+            }
+            if (d.getRegiao() != null && !regNorm.equals(d.getRegiao())) {
+                d.setRegiao(regNorm); alterou = true;
+            }
+            if (!ufConv.equals(d.getUf())) {
+                d.setUf(ufConv); alterou = true;
+            }
+        }
+
+        if (alterou) {
+            repository.saveAll(todos);
+            System.out.println("[MIGRAÇÃO] Dados existentes normalizados com sucesso.");
+        }
     }
 
     // =============================================
