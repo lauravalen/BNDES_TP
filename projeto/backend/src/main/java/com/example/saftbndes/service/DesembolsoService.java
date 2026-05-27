@@ -346,6 +346,12 @@ public class DesembolsoService {
 
     // Salva um novo desembolso (usado pelo formulário do frontend)
     public DesembolsoMensal salvar(DesembolsoMensal desembolso) {
+        desembolso.setSetorBndes(normalizar(desembolso.getSetorBndes()));
+        desembolso.setSubsetorBndes(normalizar(desembolso.getSubsetorBndes()));
+        desembolso.setMunicipio(normalizar(desembolso.getMunicipio()));
+        desembolso.setProduto(normalizar(desembolso.getProduto()));
+        desembolso.setRegiao(normalizar(desembolso.getRegiao()));
+        desembolso.setUf(converterUf(desembolso.getUf()));
         return repository.save(desembolso);
     }
 
@@ -388,25 +394,31 @@ public class DesembolsoService {
     // NORMALIZAÇÃO DOS DADOS DO CSV
     // =============================================
     // Converte texto para Title Case (primeira letra maiúscula)
-    // Ex: "RIO DE JANEIRO" → "Rio De Janeiro"
+    // Preserva siglas conhecidas em maiúsculo (ex: BNDES)
+    // Ex: "RIO DE JANEIRO" → "Rio de Janeiro"
+    // Ex: "BNDES AUTOMÁTICO" → "BNDES Automático"
     private String normalizar(String valor) {
         String limpo = limpar(valor);
         if (limpo.isEmpty()) return limpo;
 
-        // Palavras que ficam em minúsculo (preposições)
-        var preposicoes = java.util.Set.of("de", "da", "do", "das", "dos", "em", "na", "no");
+        var preposicoes = java.util.Set.of("de", "da", "do", "das", "dos", "em", "na", "no", "e");
+        var siglas = java.util.Set.of("bndes");
 
-        String[] palavras = limpo.toLowerCase().split(" ");
+        String[] palavras = limpo.split(" ");
         var resultado = new StringBuilder();
 
         for (int i = 0; i < palavras.length; i++) {
             String p = palavras[i];
             if (p.isEmpty()) continue;
-            if (i > 0 && preposicoes.contains(p)) {
-                resultado.append(p);
+
+            String lower = p.toLowerCase();
+            if (siglas.contains(lower)) {
+                resultado.append(p.toUpperCase());
+            } else if (i > 0 && preposicoes.contains(lower)) {
+                resultado.append(lower);
             } else {
-                resultado.append(Character.toUpperCase(p.charAt(0)));
-                if (p.length() > 1) resultado.append(p.substring(1));
+                resultado.append(Character.toUpperCase(lower.charAt(0)));
+                if (lower.length() > 1) resultado.append(lower.substring(1));
             }
             if (i < palavras.length - 1) resultado.append(" ");
         }
